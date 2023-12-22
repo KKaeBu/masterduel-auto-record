@@ -2,8 +2,9 @@ import sys
 import psutil as ps
 import pygetwindow as gw
 
-from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout
-from PyQt5.QtGui import QIcon
+import pygetwindow as gw
+import pyautogui
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLabel
 from PyQt5.QtCore import QTimer
 
 md_ps = () #(masterduel.exe, pid)
@@ -12,44 +13,62 @@ for p in ps.process_iter():
     if p.name() == "masterduel.exe":
         md_ps = ('masterduel', p.pid)
 
-class MyApp(QWidget):
-
+class GameMonitor(QWidget):
     def __init__(self):
         super().__init__()
-        self.initUI()
 
-    def initUI(self):
         self.setWindowTitle("마듀 자동 전적 기록기")
-        self.setWindowIcon(QIcon('./icon/light.png'))
-        self.setGeometry(100, 100, 400, 300)
-        self.label = QLabel("현재 창 크기: 400 x 300", self)
-        layout = QVBoxLayout()
-        layout.addWidget(self.label)
+        self.setGeometry(100, 100, 400, 200)
 
-        self.setLayout(layout)
+        self.layout = QVBoxLayout()
 
-        # 타이머를 사용하여 주기적으로 창 크기 업데이트
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_window_size)
-        self.timer.start(500)  # 500ms마다 업데이트
-        self.show()
+        self.start_button = QPushButton("Start Monitoring", self)
+        self.start_button.clicked.connect(self.start_monitoring)
+        self.layout.addWidget(self.start_button)
 
-    def update_window_size(self):
-        try:
-            # 특정 프로그램의 이름을 지정
-            program_name = md_ps[0]
-            window = gw.getWindowsWithTitle(program_name)[0]
-            size = window.size
-            position = window.topleft
+        self.stop_button = QPushButton("Stop Monitoring", self)
+        self.stop_button.clicked.connect(self.stop_monitoring)
+        self.stop_button.setEnabled(False)
+        self.layout.addWidget(self.stop_button)
 
-            # 다른 프로그램의 창 크기를 가져와서 GUI 창 크기 업데이트
-            self.setGeometry(position.x, position.y, size.width, size.height)
-            self.label.setText(f"현재 창 크기: {size.width} x {size.height}")
-        except IndexError:
-            pass
+        self.status_label = QLabel("", self)
+        self.layout.addWidget(self.status_label)
+
+        self.setLayout(self.layout)
+
+        self.game_window = None
+        self.monitoring_timer = QTimer(self)
+        self.monitoring_timer.timeout.connect(self.check_game_status)
+
+    def start_monitoring(self):
+        self.game_window = gw.getWindowsWithTitle(md_ps[0])[0]
+        self.monitoring_timer.start(1000)  # Check every second
+        self.start_button.setEnabled(False)
+        self.stop_button.setEnabled(True)
+        self.status_label.setText("Monitoring...")
+
+    def stop_monitoring(self):
+        self.monitoring_timer.stop()
+        self.start_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        self.status_label.setText("Monitoring stopped.")
+
+    def check_game_status(self):
+        if self.game_window.isActive:
+            # Get the position and size of the game window
+            x, y, width, height = self.game_window.left, self.game_window.top, self.game_window.width, self.game_window.height
+
+            # Capture only the game window area
+            screenshot = pyautogui.screenshot(region=(x, y, width, height))
+            screenshot.save("game_screenshot.png")
+
+            self.status_label.setText("Game is active.")
+        else:
+            self.status_label.setText("Game is not active.")
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    ex = MyApp()
+    monitor = GameMonitor()
+    monitor.show()
     sys.exit(app.exec_())
